@@ -61,54 +61,21 @@ typedef struct _GstVvas_XTrackerPrivate GstVvas_XTrackerPrivate;
  */
 enum
 {
-  /** default */
-  PROP_0,
-  /** Tracker algorithm type */
-  PROP_TRACKER_TYPE,
-  /** flag to use color based matching or not in IOU algorithm */
-  PROP_IOU_USE_COLOR,
-  /** Color space to be used for object matching */
-  PROP_USE_MATCHING_COLOR_SPACE,
-  /** Feature length for KCF tracker */
-  PROP_FEATURE_LENGTH,
-  /** Enum to set search scales to be used in KCF tracker */
-  PROP_SEARCH_SCALE,
-  /** Inactive time period for objects to stop tracking */
-  PROP_INACTIVE_WAIT_INTERVAL,
-  /** Minimum object width for tracking */
-  PROP_MIN_OBJECT_WIDTH,
-  /** Minimum object height for tracking */
-  PROP_MIN_OBJECT_HEIGHT,
-  /** Maximum width above which objects are not tracked */
-  PROP_MAX_OBJECT_WIDTH,
-  /** Maximum height above which objects are not tracked */
-  PROP_MAX_OBJECT_HEIGHT,
-  /** Number of consecutive frames detection for considering tracking */
-  PROP_NUM_FRAMES_CONFIDENCE,
-  /** IOU search scale for object matching */
-  PROP_MATCHING_SEARCH_REGION,
-  /** Search scale for KCF tracker */
-  PROP_RELATIVE_SEARCH_REGION,
-  /** Correlation threshold for object matching */
-  PROP_CORRELATION_THRESHOLD,
-  /** Overlap threshold for object matching */
-  PROP_OVERLAP_THRESHOLD,
-  /** Scale change threshold for object matching */
-  PROP_SCALE_CHANGE_THRESHOLD,
-  /** Correlation weightage for object matching */
-  PROP_CORRELATION_WEIGHT,
-  /** Overlap weightage for object matching */
-  PROP_OVERLAP_WEIGHT,
-  /** Scale change wieghtage for object matching */
-  PROP_SCALE_CHANGE_WEIGHT,
-  /** Occlusion threshold for considering objects are under occlusion */
-  PROP_OCCLUSION_THRESHOLD,
-  /** Tracker confidence threshold to consider object tracked properly */
-  PROP_CONFIDENCE_SCORE_THRESHOLD,
-  /** Flag to enable marking of inactive objects */
-  PROP_SKIP_INACTIVE_OBJS,
+  PROP_0,                          // Default, değiştirme
+  PROP_OBJ_MATCH_COLOR,            // VvasTrackerMatchColorSpace obj_match_color;
+  PROP_MODEL_PATH,                 // std::string MODEL_PATH;
+  PROP_TRACKER_TYPE,               // VvasTrackerAlgoType tracker_type;
+  PROP_OUTPUT_SIZE,                // int OUTPUT_SIZE;
+  PROP_EXEMPLAR_SIZE,              // int EXEMPLAR_SIZE;
+  PROP_SEARCH_SIZE,                // int SEARCH_SIZE;
+  PROP_CONTEXT_AMOUNT,             // float CONTEXT_AMOUNT;
+  PROP_INSTANCE_SIZE,              // int INSTANCE_SIZE;
+  PROP_PENALTY_K,                  // float PENALTY_K;
+  PROP_WINDOW_INFLUENCE,           // float WINDOW_INFLUENCE;
+  PROP_LR,                         // float LR;
+  PROP_W2,                         // float w2;
+  PROP_W3,                         // float w3;
 };
-
 /** @struct TrackerInstances
  *  @brief  Holds tracker instances
  */
@@ -126,7 +93,7 @@ struct _GstVvas_XTrackerPrivate
   /** Contains image properties from input caps */
   GstVideoInfo *in_vinfo;
   /** Contains tracker configure information */
-  VvasTrackerconfig tconfig;
+  VvasTrackerPRLConfig tconfig;
   /** contains sourceId and tracker instances mapping */
   GHashTable *tracker_instances_hash;
   /** global context for vvas tracker */
@@ -139,7 +106,7 @@ struct _GstVvas_XTrackerPrivate
 static GstStaticPadTemplate sink_template = GST_STATIC_PAD_TEMPLATE ("sink",
     GST_PAD_SINK,
     GST_PAD_ALWAYS,
-    GST_STATIC_CAPS (GST_VIDEO_CAPS_MAKE ("{NV12}")));
+    GST_STATIC_CAPS (GST_VIDEO_CAPS_MAKE ("{BGR}")));
 
 /**
  *  @brief Defines source pad template
@@ -147,7 +114,7 @@ static GstStaticPadTemplate sink_template = GST_STATIC_PAD_TEMPLATE ("sink",
 static GstStaticPadTemplate src_template = GST_STATIC_PAD_TEMPLATE ("src",
     GST_PAD_SRC,
     GST_PAD_ALWAYS,
-    GST_STATIC_CAPS (GST_VIDEO_CAPS_MAKE ("{NV12}")));
+    GST_STATIC_CAPS (GST_VIDEO_CAPS_MAKE ("{BGR}")));
 
 #define gst_vvas_xtracker_parent_class parent_class
 
@@ -184,14 +151,8 @@ static gboolean gst_vvas_xtracker_sink_event(GstBaseTransform *trans,
  */
 typedef enum
 {
-  /** Intersection-Over-Union algorithm */
-  GST_TRACKER_ALGO_IOU,
-  /** Minimum Output Sum of Squared Error algorithm */
-  GST_TRACKER_ALGO_MOSSE,
-  /** Kernelized Correlation Filter algorithm */
-  GST_TRACKER_ALGO_KCF,
-  /** No Algorithm is specified. \p TRACKER_ALGO_KCF will be
-     set as default algorithm */
+  /** PRL algorithm */
+  GST_TRACKER_ALGO_PRL,
   GST_TRACKER_ALGO_NONE,
 } GstVvasTrackerAlgoType;
 
@@ -206,9 +167,7 @@ gst_vvas_tracker_tracker_algo_type (void)
   static GType qtype = 0;
   if (qtype == 0) {
     static const GEnumValue tracker_algo_type[] = {
-      {GST_TRACKER_ALGO_IOU, "Tracker IOU Algorithm", "IOU"},
-      {GST_TRACKER_ALGO_MOSSE, "Tracker MOSSE Algorithm", "MOSSE"},
-      {GST_TRACKER_ALGO_KCF, "Tracker KCF Algorithm", "KCF"},
+      {GST_TRACKER_ALGO_PRL, "Tracker PRL Algorithm", "PRL"},
       {0, NULL, NULL}
     };
     qtype =
@@ -264,6 +223,9 @@ typedef enum
   /** Search for in same scale */
   GST_SEARCH_SCALE_NONE,
 } GstVvasTrackerSearchScale;
+
+
+
 
 /**
  *  @fn GType gst_vvas_tracker_search_scale_type (void)
@@ -327,112 +289,70 @@ gst_vvas_tracker_match_color_space (void)
   return qtype;
 }
 
-/** @def GST_VVAS_TRACKER_TRACKER_ALGO_DEFAULT
- *  @brief Sets default algorithm for object tracking.
+/** @def GST_VVAS_TRACKER_MODEL_PATH_DEFAULT
+ *  @brief Default model path for PRL tracker.
  */
-#define GST_VVAS_TRACKER_TRACKER_ALGO_DEFAULT           (GST_TRACKER_ALGO_KCF)
-/** @def GST_VVAS_TRACKER_IOU_USE_COLOR_FEATURE
- *  @brief Default setting to use color matching or not during IOU based tracking.
- */
-#define GST_VVAS_TRACKER_IOU_USE_COLOR_FEATURE          (1)
-/** @def GST_VVAS_TRACKER_USE_MATCHING_COLOR_SPACE
+#define GST_VVAS_TRACKER_MODEL_PATH_DEFAULT ""
+
+/** @def GST_VVAS_TRACKER_OBJ_MATCH_COLOR_DEFAULT
  *  @brief Default color space for matching objects.
  */
-#define GST_VVAS_TRACKER_USE_MATCHING_COLOR_SPACE       (GST_TRACKER_USE_HSV)
-/** @def GST_VVAS_TRACKER_FEATURE_LENGTH_DEFAULT
- *  @brief Default feature length for KCF tracker.
- */
-#define GST_VVAS_TRACKER_FEATURE_LENGTH_DEFAULT         (31)
-/** @def GST_VVAS_TRACKER_SEARCH_SCALE_DEFAULT
- *  @brief Default search scales to be used during KCF tracking.
- */
-#define GST_VVAS_TRACKER_SEARCH_SCALE_DEFAULT           (GST_SEARCH_SCALE_ALL)
+#define GST_VVAS_TRACKER_OBJ_MATCH_COLOR_DEFAULT   (TRACKER_USE_RGB)
 
-/** @def GST_VVAS_TRACKER_INACTIVE_WAIT_INTERVAL_DEFAULT
- *  @brief To set maximum inactive time period in terms of frames.
+/** @def GST_VVAS_TRACKER_TRACKER_TYPE_DEFAULT
+ *  @brief Default algorithm for PRL tracking.
  */
-#define GST_VVAS_TRACKER_INACTIVE_WAIT_INTERVAL_DEFAULT (200)
+#define GST_VVAS_TRACKER_TRACKER_TYPE_DEFAULT      (TRACKER_ALGO_NONE)
 
-/** @def GST_VVAS_TRACKER_MIN_OBJECT_WIDTH_DEFAULT
- *  @brief Default minimum width of object for tracking.
+/** @def GST_VVAS_TRACKER_OUTPUT_SIZE_DEFAULT
+ *  @brief Default output size for PRL tracker.
  */
-#define GST_VVAS_TRACKER_MIN_OBJECT_WIDTH_DEFAULT       (20)
+#define GST_VVAS_TRACKER_OUTPUT_SIZE_DEFAULT       (11)
 
-/** @def GST_VVAS_TRACKER_MIN_OBJECT_HEIGHT_DEFAULT
- *  @brief Default minimum height of object for tracking.
+/** @def GST_VVAS_TRACKER_EXEMPLAR_SIZE_DEFAULT
+ *  @brief Default exemplar size for PRL tracker.
  */
-#define GST_VVAS_TRACKER_MIN_OBJECT_HEIGHT_DEFAULT      (60)
+#define GST_VVAS_TRACKER_EXEMPLAR_SIZE_DEFAULT     (127)
 
-/** @def GST_VVAS_TRACKER_MAX_OBJECT_WIDTH_DEFAULT
- *  @brief Default maximum width above which object consider as noise.
+/** @def GST_VVAS_TRACKER_SEARCH_SIZE_DEFAULT
+ *  @brief Default search size for PRL tracker.
  */
-#define GST_VVAS_TRACKER_MAX_OBJECT_WIDTH_DEFAULT       (200)
+#define GST_VVAS_TRACKER_SEARCH_SIZE_DEFAULT       (287)
 
-/** @def GST_VVAS_TRACKER_MAX_OBJECT_HEIGHT_DEFAULT
- *  @brief Default maximum height above which object consider as noise.
+/** @def GST_VVAS_TRACKER_CONTEXT_AMOUNT_DEFAULT
+ *  @brief Default context amount for PRL tracker.
  */
-#define GST_VVAS_TRACKER_MAX_OBJECT_HEIGHT_DEFAULT      (360)
+#define GST_VVAS_TRACKER_CONTEXT_AMOUNT_DEFAULT    (0.5f)
 
-/** @def GST_VVAS_TRACKER_NUM_FRAMES_CONFIDENCE_DEFAULT
- *  @brief Default consecutive number of frame object need
- *         to be detected for tracking.
+/** @def GST_VVAS_TRACKER_INSTANCE_SIZE_DEFAULT
+ *  @brief Default instance size for PRL tracker.
  */
-#define GST_VVAS_TRACKER_NUM_FRAMES_CONFIDENCE_DEFAULT  (3)
+#define GST_VVAS_TRACKER_INSTANCE_SIZE_DEFAULT     (287)
 
-/** @def GST_VVAS_TRACKER_MATCHING_SEARCH_REGION_DEFAULT
- *  @brief Default scale for matching objects using IOU.
+/** @def GST_VVAS_TRACKER_PENALTY_K_DEFAULT
+ *  @brief Default penalty_k for PRL tracker.
  */
-#define GST_VVAS_TRACKER_MATCHING_SEARCH_REGION_DEFAULT (1.5)
+#define GST_VVAS_TRACKER_PENALTY_K_DEFAULT         (0.05f)
 
-/** @def GST_VVAS_TRACKER_RELATIVE_SEARCH_REGION_DEFAULT
- *  @brief Sets default search scale factor for KCF tracker.
+/** @def GST_VVAS_TRACKER_WINDOW_INFLUENCE_DEFAULT
+ *  @brief Default window influence for PRL tracker.
  */
-#define GST_VVAS_TRACKER_RELATIVE_SEARCH_REGION_DEFAULT (1.5)
+#define GST_VVAS_TRACKER_WINDOW_INFLUENCE_DEFAULT  (0.45f)
 
-/** @def GST_VVAS_TRACKER_CORRELATION_THRESHOLD_DEFAULT
- *  @brief Default correlation threshold for object matching.
+/** @def GST_VVAS_TRACKER_LR_DEFAULT
+ *  @brief Default learning rate for PRL tracker.
  */
-#define GST_VVAS_TRACKER_CORRELATION_THRESHOLD_DEFAULT  (0.7)
+#define GST_VVAS_TRACKER_LR_DEFAULT                (0.40f)
 
-/** @def GST_VVAS_TRACKER_OVERLAP_THRESHOLD_DEFAULT
- *  @brief SDefault overlap threshold for object matching.
+/** @def GST_VVAS_TRACKER_W2_DEFAULT
+ *  @brief Default w2 value for PRL tracker.
  */
-#define GST_VVAS_TRACKER_OVERLAP_THRESHOLD_DEFAULT      (0.0)
+#define GST_VVAS_TRACKER_W2_DEFAULT                (0.2f)
 
-/** @def GST_VVAS_TRACKER_SCALE_CHANGE_THRESHOLD_DEFAULT
- *  @brief Default scale change threshold for object matching.
+/** @def GST_VVAS_TRACKER_W3_DEFAULT
+ *  @brief Default w3 value for PRL tracker.
  */
-#define GST_VVAS_TRACKER_SCALE_CHANGE_THRESHOLD_DEFAULT (0.7)
-
-/** @def GST_VVAS_TRACKER_CORRELATION_WEIGHT_DEFAULT
- *  @brief Default weightage for correlation during objects matching.
- */
-#define GST_VVAS_TRACKER_CORRELATION_WEIGHT_DEFAULT      (0.7)
-
-/** @def GST_VVAS_TRACKER_OVERLAP_WEIGHT_DEFAULT
- *  @brief Default weightage for overlap during objects matching.
- */
-#define GST_VVAS_TRACKER_OVERLAP_WEIGHT_DEFAULT          (0.2)
-
-/** @def GST_VVAS_TRACKER_SCALE_CHANGE_WEIGHT_DEFAULT
- *  @brief Default weightage for object scale change during objects matching.
- */
-#define GST_VVAS_TRACKER_SCALE_CHANGE_WEIGHT_DEFAULT     (0.1)
-
-/** @def GST_VVAS_TRACKER_OCCLUSION_THRESHOLD_DEFAULT
- *  @brief Default value to consider objects under occlusion.
- */
-#define GST_VVAS_TRACKER_OCCLUSION_THRESHOLD_DEFAULT    (0.4)
-
-/** @def GST_VVAS_TRACKER_CONFIDENCE_SCORE_THRESHOLD_DEFAULT
- *  @brief Default confidence threshold to consider object is tracked properly.
- */
-#define GST_VVAS_TRACKER_CONFIDENCE_SCORE_THRESHOLD_DEFAULT (0.25)
-
-/** @def GST_VVAS_TRACKER_SKIP_INACTIVE_OBJS_DEFAULT
- *  @brief Default confidence threshold to consider object is tracked properly.
- */
-#define GST_VVAS_TRACKER_SKIP_INACTIVE_OBJS_DEFAULT FALSE
+#define GST_VVAS_TRACKER_W3_DEFAULT                (0.1f)
 
 /**
  *  @fn gboolean vvas_xtracker_deinit (GstVvas_XTracker * self)
@@ -588,200 +508,86 @@ gst_vvas_xtracker_class_init (GstVvas_XTrackerClass * klass)
   transform_class->transform_ip = gst_vvas_xtracker_transform_ip;
   transform_class->sink_event = gst_vvas_xtracker_sink_event;
 
-  /* Tracker algorithm */
-  g_object_class_install_property (gobject_class, PROP_TRACKER_TYPE,
-      g_param_spec_enum ("tracker-algo", "Tracker algorithm name",
-          "Tracker algorithm to use",
-          GST_TYPE_VVAS_TRACKER_ALGO_TYPE,
-          GST_VVAS_TRACKER_TRACKER_ALGO_DEFAULT,
-          (GParamFlags) (G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS |
-              GST_PARAM_MUTABLE_READY)));
+  
+  g_object_class_install_property (gobject_class, PROP_OBJ_MATCH_COLOR,
+    g_param_spec_enum ("obj-match-color", "Object Match Color",
+        "Object match color space for PRL tracker",
+        GST_TYPE_VVAS_TRACKER_MATCHING_COLOR_SPACE,
+        GST_VVAS_TRACKER_OBJ_MATCH_COLOR_DEFAULT,
+        (GParamFlags)(G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS)));
 
-  /* IOU with or without color feature */
-  g_object_class_install_property (gobject_class, PROP_IOU_USE_COLOR,
-      g_param_spec_boolean ("IOU-with-color", "IOU algorithm with color info",
-          "To specify whether to use color feature with IOU or not", 0,
-          (GParamFlags) (G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS)));
+g_object_class_install_property (gobject_class, PROP_MODEL_PATH,
+    g_param_spec_string ("model-path", "Model Path",
+        "Path to the PRL model file",
+        GST_VVAS_TRACKER_MODEL_PATH_DEFAULT,
+        (GParamFlags)(G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS)));
 
-  /* color space to be used for matching objects during detection */
-  g_object_class_install_property (gobject_class, PROP_USE_MATCHING_COLOR_SPACE,
-      g_param_spec_enum ("obj-match-color-space", "objects matching color space info", "color space to be used for matching objects during detection. \
-		HSV is more accurate with minor performance impact", GST_TYPE_VVAS_TRACKER_MATCHING_COLOR_SPACE, GST_VVAS_TRACKER_USE_MATCHING_COLOR_SPACE,
-          (GParamFlags) (G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS | GST_PARAM_MUTABLE_READY)));
+g_object_class_install_property (gobject_class, PROP_OUTPUT_SIZE,
+    g_param_spec_int ("output-size", "Output Size",
+        "Output size for PRL tracker",
+        1, 2048, GST_VVAS_TRACKER_OUTPUT_SIZE_DEFAULT,
+        (GParamFlags)(G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS)));
 
-  /* Feature length */
-  g_object_class_install_property (gobject_class, PROP_FEATURE_LENGTH,
-      g_param_spec_enum ("feature-length", "Object feature length",
-          "Object feature length (required only for KCF algorithm)",
-          GST_TYPE_VVAS_TRACKER_FEATURE_LENGTH,
-          GST_VVAS_TRACKER_FEATURE_LENGTH_DEFAULT,
-          (GParamFlags) (G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS |
-              GST_PARAM_MUTABLE_READY)));
+g_object_class_install_property (gobject_class, PROP_EXEMPLAR_SIZE,
+    g_param_spec_int ("exemplar-size", "Exemplar Size",
+        "Exemplar size for PRL tracker",
+        1, 2048, GST_VVAS_TRACKER_EXEMPLAR_SIZE_DEFAULT,
+        (GParamFlags)(G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS)));
 
-  /* Scales to search */
-  g_object_class_install_property (gobject_class, PROP_SEARCH_SCALE,
-      g_param_spec_enum ("search-scale", "Scale type for object localization",
-          "Scales to verify to localize the object",
-          GST_TYPE_VVAS_TRACKER_SEARCH_SCALE,
-          GST_VVAS_TRACKER_SEARCH_SCALE_DEFAULT,
-          (GParamFlags) (G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS |
-              GST_PARAM_MUTABLE_READY)));
+g_object_class_install_property (gobject_class, PROP_SEARCH_SIZE,
+    g_param_spec_int ("search-size", "Search Size",
+        "Search size for PRL tracker",
+        1, 2048, GST_VVAS_TRACKER_SEARCH_SIZE_DEFAULT,
+        (GParamFlags)(G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS)));
 
-  /* Number of inactive frames */
-  g_object_class_install_property (gobject_class, PROP_INACTIVE_WAIT_INTERVAL,
-      g_param_spec_uint ("inactive-wait-interval",
-          "Wait interval for inactive objects",
-          "Number of detection frames to wait before stopping tracking of inactive objects",
-          1, G_MAXUINT, GST_VVAS_TRACKER_INACTIVE_WAIT_INTERVAL_DEFAULT,
-          (GParamFlags) (G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS |
-              GST_PARAM_MUTABLE_READY)));
+g_object_class_install_property (gobject_class, PROP_CONTEXT_AMOUNT,
+    g_param_spec_float ("context-amount", "Context Amount",
+        "Context amount for PRL tracker",
+        0.0, 10.0, GST_VVAS_TRACKER_CONTEXT_AMOUNT_DEFAULT,
+        (GParamFlags)(G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS)));
 
-  /* Minimum object width */
-  g_object_class_install_property (gobject_class, PROP_MIN_OBJECT_WIDTH,
-      g_param_spec_uint ("min-object-width", "Minimum object width",
-          "Minimum object width in pixels to consider for tracking",
-          1, G_MAXUINT, GST_VVAS_TRACKER_MIN_OBJECT_WIDTH_DEFAULT,
-          (GParamFlags) (G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS |
-              GST_PARAM_MUTABLE_READY)));
+g_object_class_install_property (gobject_class, PROP_INSTANCE_SIZE,
+    g_param_spec_int ("instance-size", "Instance Size",
+        "Instance size for PRL tracker",
+        1, 2048, GST_VVAS_TRACKER_INSTANCE_SIZE_DEFAULT,
+        (GParamFlags)(G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS)));
 
-  /* Minimum object height */
-  g_object_class_install_property (gobject_class, PROP_MIN_OBJECT_HEIGHT,
-      g_param_spec_uint ("min-object-height", "Minimum object height",
-          "Minimum object height in pixels to consider for tracking",
-          1, G_MAXUINT, GST_VVAS_TRACKER_MIN_OBJECT_HEIGHT_DEFAULT,
-          (GParamFlags) (G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS |
-              GST_PARAM_MUTABLE_READY)));
+g_object_class_install_property (gobject_class, PROP_PENALTY_K,
+    g_param_spec_float ("penalty-k", "Penalty K",
+        "Penalty K for PRL tracker",
+        0.0, 10.0, GST_VVAS_TRACKER_PENALTY_K_DEFAULT,
+        (GParamFlags)(G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS)));
 
-  /* Maximum object width */
-  g_object_class_install_property (gobject_class, PROP_MAX_OBJECT_WIDTH,
-      g_param_spec_uint ("max-object-width", "Maximum object width",
-          "Objects with more than maximum width are considered as noise",
-          1, G_MAXUINT, GST_VVAS_TRACKER_MAX_OBJECT_WIDTH_DEFAULT,
-          (GParamFlags) (G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS |
-              GST_PARAM_MUTABLE_READY)));
+g_object_class_install_property (gobject_class, PROP_WINDOW_INFLUENCE,
+    g_param_spec_float ("window-influence", "Window Influence",
+        "Window influence for PRL tracker",
+        0.0, 10.0, GST_VVAS_TRACKER_WINDOW_INFLUENCE_DEFAULT,
+        (GParamFlags)(G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS)));
 
-  /* Maximum object height */
-  g_object_class_install_property (gobject_class, PROP_MAX_OBJECT_HEIGHT,
-      g_param_spec_uint ("max-object-height", "Maximum object height",
-          "Objects with more than maximum height are considered as noise",
-          1, G_MAXUINT, GST_VVAS_TRACKER_MAX_OBJECT_HEIGHT_DEFAULT,
-          (GParamFlags) (G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS |
-              GST_PARAM_MUTABLE_READY)));
+g_object_class_install_property (gobject_class, PROP_LR,
+    g_param_spec_float ("lr", "Learning Rate",
+        "Learning rate for PRL tracker",
+        0.0, 1.0, GST_VVAS_TRACKER_LR_DEFAULT,
+        (GParamFlags)(G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS)));
 
-  /* Number of frames to enable tracking - based on detection cycle and camera position */
-  g_object_class_install_property (gobject_class, PROP_NUM_FRAMES_CONFIDENCE,
-      g_param_spec_uint ("num-frames-confidence",
-          "Number of frames to enable tracking",
-          "Number of times object need to be detected continuously before tracking",
-          1, G_MAXUINT, GST_VVAS_TRACKER_NUM_FRAMES_CONFIDENCE_DEFAULT,
-          (GParamFlags) (G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS |
-              GST_PARAM_MUTABLE_READY)));
+g_object_class_install_property (gobject_class, PROP_W2,
+    g_param_spec_float ("w2", "W2",
+        "W2 for PRL tracker",
+        0.0, 10.0, GST_VVAS_TRACKER_W2_DEFAULT,
+        (GParamFlags)(G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS)));
 
-  /* Search scale factor to be used for matching objects during detection interval */
-  g_object_class_install_property (gobject_class, PROP_MATCHING_SEARCH_REGION,
-      g_param_spec_float ("match-search-region",
-          "Object search region to match with detected objects",
-          "Object search region to match with detected objects",
-          1, 2.0, GST_VVAS_TRACKER_MATCHING_SEARCH_REGION_DEFAULT,
-          (GParamFlags) (G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS |
-              GST_PARAM_MUTABLE_READY)));
+g_object_class_install_property (gobject_class, PROP_W3,
+    g_param_spec_float ("w3", "W3",
+        "W3 for PRL tracker",
+        0.0, 10.0, GST_VVAS_TRACKER_W3_DEFAULT,
+        (GParamFlags)(G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS)));
 
-  /* Relative search region - Based on camera position and average object speed */
-  g_object_class_install_property (gobject_class, PROP_RELATIVE_SEARCH_REGION,
-      g_param_spec_float ("relative-search-region",
-          "Object search region with respect to detection coordinates",
-          "Object search region with respect to detection coordinates",
-          1, 2.5, GST_VVAS_TRACKER_RELATIVE_SEARCH_REGION_DEFAULT,
-          (GParamFlags) (G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS |
-              GST_PARAM_MUTABLE_READY)));
-
-  /* Correlation threshold */
-  g_object_class_install_property (gobject_class, PROP_CORRELATION_THRESHOLD,
-      g_param_spec_float ("correlation-threshold",
-          "Object correlation threshold value for matching",
-          "Object correlation threshold value for matching",
-          0.1, 1.0, GST_VVAS_TRACKER_CORRELATION_THRESHOLD_DEFAULT,
-          (GParamFlags) (G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS |
-              GST_PARAM_MUTABLE_READY)));
-
-  /* Overlap threshold */
-  g_object_class_install_property (gobject_class, PROP_OVERLAP_THRESHOLD,
-      g_param_spec_float ("overlap-threshold",
-          "Object overlap threshold to consider for matching",
-          "Percentage of objects overlap should be above overlap-threshold to consider for matching",
-          0.0, 1.0, GST_VVAS_TRACKER_OVERLAP_THRESHOLD_DEFAULT,
-          (GParamFlags) (G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS |
-              GST_PARAM_MUTABLE_READY)));
-
-  /* Object scale change threshold */
-  g_object_class_install_property (gobject_class, PROP_SCALE_CHANGE_THRESHOLD,
-      g_param_spec_float ("scale-change-threshold",
-          "Maximum object scale change threshold",
-          "Maximum object scale change threshold to consider for matching."
-          "Value of 1 means double the scale.",
-          0.001, 1.0, GST_VVAS_TRACKER_SCALE_CHANGE_THRESHOLD_DEFAULT,
-          (GParamFlags) (G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS |
-              GST_PARAM_MUTABLE_READY)));
-
-  /* Weightage for correlation */
-  g_object_class_install_property (gobject_class, PROP_CORRELATION_WEIGHT,
-      g_param_spec_float ("correlation-weight",
-          "Weightage for correlation value",
-          "Weightage for correlation value",
-          0.0, 1.0, GST_VVAS_TRACKER_CORRELATION_WEIGHT_DEFAULT,
-          (GParamFlags) (G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS |
-              GST_PARAM_MUTABLE_READY)));
-
-  /* Weightage for overlap */
-  g_object_class_install_property (gobject_class, PROP_OVERLAP_WEIGHT,
-      g_param_spec_float ("overlap-weight",
-          "Weightage for overlap value",
-          "Weightage for overlap value",
-          0.0, 1.0, GST_VVAS_TRACKER_OVERLAP_WEIGHT_DEFAULT,
-          (GParamFlags) (G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS |
-              GST_PARAM_MUTABLE_READY)));
-
-  /* Weightage for scale change */
-  g_object_class_install_property (gobject_class, PROP_SCALE_CHANGE_WEIGHT,
-      g_param_spec_float ("scale-change-weight",
-          "Weightage for change in scale",
-          "Weightage for change in scale",
-          0.0, 1.0, GST_VVAS_TRACKER_SCALE_CHANGE_WEIGHT_DEFAULT,
-          (GParamFlags) (G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS |
-              GST_PARAM_MUTABLE_READY)));
-
-  /* Occlusion threshold */
-  g_object_class_install_property (gobject_class, PROP_OCCLUSION_THRESHOLD,
-      g_param_spec_float ("occlusion-threshold",
-          "Threshold for considering object as occluded",
-          "Threshold for considering object as occluded",
-          0.0, 1.0, GST_VVAS_TRACKER_OCCLUSION_THRESHOLD_DEFAULT,
-          (GParamFlags) (G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS |
-              GST_PARAM_MUTABLE_READY)));
-
-  /* Confidence score threshold */
-  g_object_class_install_property (gobject_class,
-      PROP_CONFIDENCE_SCORE_THRESHOLD,
-      g_param_spec_float ("confidence-score-threshold",
-          "Tracker confidence score threshold",
-          "Confidence score of tracker to be consider for tracking object", 0.0,
-          1.0, GST_VVAS_TRACKER_CONFIDENCE_SCORE_THRESHOLD_DEFAULT,
-          (GParamFlags) (G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS |
-              GST_PARAM_MUTABLE_READY)));
-  /* Enabling or disabling inactive objects */
-  g_object_class_install_property (gobject_class, PROP_SKIP_INACTIVE_OBJS,
-      g_param_spec_boolean ("skip-inactive-objs",
-          "Flag to enable marking of inactive objects",
-          "Flag to enable or disable marking of inactive objects. This marking of \
-           inactive objects helps downstream plugins to process further or not",
-          GST_VVAS_TRACKER_SKIP_INACTIVE_OBJS_DEFAULT,
-          (GParamFlags) (G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS)));
 
   gst_element_class_set_details_simple (gstelement_class,
       "VVAS Tracker Plugin",
       "Object Tracking",
-      "Performs Object tracking based on feature map",
-      "Xilinx Inc <www.xilinx.com>");
+      "Performs Object tracking based on cnn",
+      "Sararge");
 
   gst_element_class_add_pad_template (gstelement_class,
       gst_static_pad_template_get (&src_template));
@@ -806,16 +612,13 @@ gst_vvas_xtracker_init (GstVvas_XTracker * self)
   GstVvas_XTrackerPrivate *priv = GST_VVAS_XTRACKER_PRIVATE (self);
   self->priv = priv;
 
-  self->tracker_algo = GST_VVAS_TRACKER_TRACKER_ALGO_DEFAULT;
-  self->search_scale = GST_VVAS_TRACKER_SEARCH_SCALE_DEFAULT;
-  self->match_color = GST_VVAS_TRACKER_USE_MATCHING_COLOR_SPACE;
+  self->tracker_algo = GST_VVAS_TRACKER_TRACKER_TYPE_DEFAULT;
+  //self->search_scale = GST_VVAS_TRACKER_SEARCH_SCALE_DEFAULT;
+  self->match_color = GST_TYPE_VVAS_TRACKER_MATCHING_COLOR_SPACE;
 
-  if (self->tracker_algo == GST_TRACKER_ALGO_IOU)
-    priv->tconfig.tracker_type = TRACKER_ALGO_IOU;
-  else if (self->tracker_algo == GST_TRACKER_ALGO_MOSSE)
-    priv->tconfig.tracker_type = TRACKER_ALGO_MOSSE;
-  else if (self->tracker_algo == GST_TRACKER_ALGO_KCF)
-    priv->tconfig.tracker_type = TRACKER_ALGO_KCF;
+  if (self->tracker_algo == GST_TRACKER_ALGO_PRL)
+    priv->tconfig.tracker_type = TRACKER_ALGO_PRL;
+  
 
   if (self->search_scale == GST_SEARCH_SCALE_ALL)
     priv->tconfig.search_scales = SEARCH_SCALE_ALL;
@@ -829,36 +632,18 @@ gst_vvas_xtracker_init (GstVvas_XTracker * self)
   else if (self->match_color == GST_TRACKER_USE_HSV)
     priv->tconfig.obj_match_color = TRACKER_USE_HSV;
 
-  priv->tconfig.iou_use_color = GST_VVAS_TRACKER_IOU_USE_COLOR_FEATURE;
-  priv->tconfig.fet_length = GST_VVAS_TRACKER_FEATURE_LENGTH_DEFAULT;
-  priv->tconfig.min_width = GST_VVAS_TRACKER_MIN_OBJECT_WIDTH_DEFAULT;
-  priv->tconfig.min_height = GST_VVAS_TRACKER_MIN_OBJECT_HEIGHT_DEFAULT;
-  priv->tconfig.max_width = GST_VVAS_TRACKER_MAX_OBJECT_WIDTH_DEFAULT;
-  priv->tconfig.max_height = GST_VVAS_TRACKER_MAX_OBJECT_HEIGHT_DEFAULT;
-  priv->tconfig.num_inactive_frames =
-      GST_VVAS_TRACKER_INACTIVE_WAIT_INTERVAL_DEFAULT;
-  priv->tconfig.num_frames_confidence =
-      GST_VVAS_TRACKER_NUM_FRAMES_CONFIDENCE_DEFAULT;
-  priv->tconfig.obj_match_search_region =
-      GST_VVAS_TRACKER_MATCHING_SEARCH_REGION_DEFAULT;
-  priv->tconfig.padding = GST_VVAS_TRACKER_RELATIVE_SEARCH_REGION_DEFAULT;
-  priv->tconfig.dist_correlation_threshold =
-      GST_VVAS_TRACKER_CORRELATION_THRESHOLD_DEFAULT;
-  priv->tconfig.dist_overlap_threshold =
-      GST_VVAS_TRACKER_OVERLAP_THRESHOLD_DEFAULT;
-  priv->tconfig.dist_scale_change_threshold =
-      GST_VVAS_TRACKER_SCALE_CHANGE_THRESHOLD_DEFAULT;
-  priv->tconfig.dist_correlation_weight =
-      GST_VVAS_TRACKER_CORRELATION_WEIGHT_DEFAULT;
-  priv->tconfig.dist_overlap_weight = GST_VVAS_TRACKER_OVERLAP_WEIGHT_DEFAULT;
-  priv->tconfig.dist_scale_change_weight =
-      GST_VVAS_TRACKER_SCALE_CHANGE_WEIGHT_DEFAULT;
-  priv->tconfig.occlusion_threshold =
-      GST_VVAS_TRACKER_OCCLUSION_THRESHOLD_DEFAULT;
-  priv->tconfig.confidence_score =
-      GST_VVAS_TRACKER_CONFIDENCE_SCORE_THRESHOLD_DEFAULT;
-  priv->tconfig.skip_inactive_objs =
-      GST_VVAS_TRACKER_SKIP_INACTIVE_OBJS_DEFAULT;
+
+  priv->tconfig.OUTPUT_SIZE   = GST_VVAS_TRACKER_OUTPUT_SIZE_DEFAULT;
+  priv->tconfig.EXEMPLAR_SIZE   = GST_VVAS_TRACKER_OUTPUT_SIZE_DEFAULT;
+  priv->tconfig.SEARCH_SIZE   = GST_VVAS_TRACKER_OUTPUT_SIZE_DEFAULT;
+  priv->tconfig.CONTEXT_AMOUNT   = GST_VVAS_TRACKER_OUTPUT_SIZE_DEFAULT;
+  priv->tconfig.INSTANCE_SIZE   = GST_VVAS_TRACKER_OUTPUT_SIZE_DEFAULT;
+  priv->tconfig.PENALTY_K   = GST_VVAS_TRACKER_OUTPUT_SIZE_DEFAULT;
+  priv->tconfig.WINDOW_INFLUENCE   = GST_VVAS_TRACKER_OUTPUT_SIZE_DEFAULT;
+  priv->tconfig.LR   = GST_VVAS_TRACKER_OUTPUT_SIZE_DEFAULT;
+  priv->tconfig.w2   = GST_VVAS_TRACKER_OUTPUT_SIZE_DEFAULT;
+  priv->tconfig.w3   = GST_VVAS_TRACKER_OUTPUT_SIZE_DEFAULT;
+  priv->tconfig.MODEL_PATH   = GST_VVAS_TRACKER_OUTPUT_SIZE_DEFAULT;
   priv->tracker_instances_hash =
       g_hash_table_new_full(g_direct_hash, g_direct_equal, NULL, g_free);
 }
@@ -877,108 +662,69 @@ gst_vvas_xtracker_init (GstVvas_XTracker * self)
  *           Based on property value type, corresponding g_value_get_xxx API will be called to get
  *           property value from GValue handle.
  */
+
+
 static void
 gst_vvas_xtracker_set_property (GObject * object, guint prop_id,
     const GValue * value, GParamSpec * pspec)
 {
   GstVvas_XTracker *self = GST_VVAS_XTRACKER (object);
   GstVvas_XTrackerPrivate *priv = self->priv;
+  
 
   switch (prop_id) {
+    case PROP_OBJ_MATCH_COLOR:
+      priv->tconfig.obj_match_color = g_value_get_enum(value);
+      break;
+    case PROP_MODEL_PATH: {
+      const gchar *model_path = g_value_get_string(value);
+      if (model_path)
+        priv->tconfig.MODEL_PATH = model_path;
+      break;
+    }
     case PROP_TRACKER_TYPE:
       self->tracker_algo = g_value_get_enum (value);
-      if (self->tracker_algo == GST_TRACKER_ALGO_IOU)
-        priv->tconfig.tracker_type = TRACKER_ALGO_IOU;
-      else if (self->tracker_algo == GST_TRACKER_ALGO_MOSSE)
-        priv->tconfig.tracker_type = TRACKER_ALGO_MOSSE;
-      else if (self->tracker_algo == GST_TRACKER_ALGO_KCF)
-        priv->tconfig.tracker_type = TRACKER_ALGO_KCF;
+      if (self->tracker_algo == GST_TRACKER_ALGO_PRL)
+        priv->tconfig.tracker_type = TRACKER_ALGO_PRL;
       else
         GST_ERROR_OBJECT (self, "Invalid Tracker type %d set\n",
             self->tracker_algo);
       break;
-    case PROP_IOU_USE_COLOR:
-      priv->tconfig.iou_use_color = g_value_get_boolean (value);
+    case PROP_OUTPUT_SIZE:
+      priv->tconfig.output_size = g_value_get_int(value);
       break;
-    case PROP_USE_MATCHING_COLOR_SPACE:
-      self->match_color = g_value_get_enum (value);
-      if (self->match_color == GST_TRACKER_USE_RGB)
-        priv->tconfig.obj_match_color = TRACKER_USE_RGB;
-      else if (self->match_color == GST_TRACKER_USE_HSV)
-        priv->tconfig.obj_match_color = TRACKER_USE_HSV;
+    case PROP_EXEMPLAR_SIZE:
+      priv->tconfig.exemplar_size = g_value_get_int(value);
       break;
-    case PROP_FEATURE_LENGTH:
-      priv->tconfig.fet_length = g_value_get_enum (value);
+    case PROP_SEARCH_SIZE:
+      priv->tconfig.search_size = g_value_get_int(value);
       break;
-    case PROP_SEARCH_SCALE:
-      self->search_scale = g_value_get_enum (value);
-      if (self->search_scale == GST_SEARCH_SCALE_ALL)
-        priv->tconfig.search_scales = SEARCH_SCALE_ALL;
-      else if (self->search_scale == GST_SEARCH_SCALE_UP)
-        priv->tconfig.search_scales = SEARCH_SCALE_UP;
-      else if (self->search_scale == GST_SEARCH_SCALE_DOWN)
-        priv->tconfig.search_scales = SEARCH_SCALE_DOWN;
-      else
-        GST_ERROR_OBJECT (self, "Invalid Search scale %d set\n",
-            self->search_scale);
+    case PROP_CONTEXT_AMOUNT:
+      priv->tconfig.context_amount = g_value_get_float(value);
       break;
-    case PROP_INACTIVE_WAIT_INTERVAL:
-      priv->tconfig.num_inactive_frames = g_value_get_uint (value);
+    case PROP_INSTANCE_SIZE:
+      priv->tconfig.instance_size = g_value_get_int(value);
       break;
-    case PROP_MIN_OBJECT_WIDTH:
-      priv->tconfig.min_width = g_value_get_uint (value);
+    case PROP_PENALTY_K:
+      priv->tconfig.penalty_k = g_value_get_float(value);
       break;
-    case PROP_MIN_OBJECT_HEIGHT:
-      priv->tconfig.min_height = g_value_get_uint (value);
+    case PROP_WINDOW_INFLUENCE:
+      priv->tconfig.window_influence = g_value_get_float(value);
       break;
-    case PROP_MAX_OBJECT_WIDTH:
-      priv->tconfig.max_width = g_value_get_uint (value);
+    case PROP_LR:
+      priv->tconfig.lr = g_value_get_float(value);
       break;
-    case PROP_MAX_OBJECT_HEIGHT:
-      priv->tconfig.max_height = g_value_get_uint (value);
+    case PROP_W2:
+      priv->tconfig.w2 = g_value_get_float(value);
       break;
-    case PROP_NUM_FRAMES_CONFIDENCE:
-      priv->tconfig.num_frames_confidence = g_value_get_uint (value);
-      break;
-    case PROP_MATCHING_SEARCH_REGION:
-      priv->tconfig.obj_match_search_region = g_value_get_float (value);
-      break;
-    case PROP_RELATIVE_SEARCH_REGION:
-      priv->tconfig.padding = g_value_get_float (value);
-      break;
-    case PROP_CORRELATION_THRESHOLD:
-      priv->tconfig.dist_correlation_threshold = g_value_get_float (value);
-      break;
-    case PROP_OVERLAP_THRESHOLD:
-      priv->tconfig.dist_overlap_threshold = g_value_get_float (value);
-      break;
-    case PROP_SCALE_CHANGE_THRESHOLD:
-      priv->tconfig.dist_scale_change_threshold = g_value_get_float (value);
-      break;
-    case PROP_CORRELATION_WEIGHT:
-      priv->tconfig.dist_correlation_weight = g_value_get_float (value);
-      break;
-    case PROP_OVERLAP_WEIGHT:
-      priv->tconfig.dist_overlap_weight = g_value_get_float (value);
-      break;
-    case PROP_SCALE_CHANGE_WEIGHT:
-      priv->tconfig.dist_scale_change_weight = g_value_get_float (value);
-      break;
-    case PROP_OCCLUSION_THRESHOLD:
-      priv->tconfig.occlusion_threshold = g_value_get_float (value);
-      break;
-    case PROP_CONFIDENCE_SCORE_THRESHOLD:
-      priv->tconfig.confidence_score = g_value_get_float (value);
-      break;
-    case PROP_SKIP_INACTIVE_OBJS:
-      priv->tconfig.skip_inactive_objs = g_value_get_boolean (value);
+    case PROP_W3:
+      priv->tconfig.w3 = g_value_get_float(value);
       break;
     default:
-      G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
+      G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
       break;
   }
 }
-
 /**
  *  @fn static void gst_vvas_xtracker_get_property (GObject * object, guint prop_id,
  *                                                  const GValue * value, GParamSpec * pspec)
@@ -1000,74 +746,47 @@ gst_vvas_xtracker_get_property (GObject * object, guint prop_id, GValue * value,
   GstVvas_XTrackerPrivate *priv = self->priv;
 
   switch (prop_id) {
+    case PROP_OBJ_MATCH_COLOR:
+      g_value_set_enum(value, priv->tconfig.obj_match_color);
+      break;
+    case PROP_MODEL_PATH:
+      g_value_set_string(value, priv->tconfig.MODEL_PATH);
+      break;
     case PROP_TRACKER_TYPE:
-      g_value_set_enum (value, self->tracker_algo);
+      g_value_set_enum(value, priv->tconfig.tracker_type);
       break;
-    case PROP_IOU_USE_COLOR:
-      g_value_set_boolean (value, priv->tconfig.iou_use_color);
+    case PROP_OUTPUT_SIZE:
+      g_value_set_int(value, priv->tconfig.output_size);
       break;
-    case PROP_USE_MATCHING_COLOR_SPACE:
-      g_value_set_enum (value, priv->tconfig.obj_match_color);
+    case PROP_EXEMPLAR_SIZE:
+      g_value_set_int(value, priv->tconfig.exemplar_size);
       break;
-    case PROP_FEATURE_LENGTH:
-      g_value_set_enum (value, priv->tconfig.fet_length);
+    case PROP_SEARCH_SIZE:
+      g_value_set_int(value, priv->tconfig.search_size);
       break;
-    case PROP_SEARCH_SCALE:
-      g_value_set_enum (value, self->search_scale);
+    case PROP_CONTEXT_AMOUNT:
+      g_value_set_float(value, priv->tconfig.context_amount);
       break;
-    case PROP_INACTIVE_WAIT_INTERVAL:
-      g_value_set_uint (value, priv->tconfig.num_inactive_frames);
+    case PROP_INSTANCE_SIZE:
+      g_value_set_int(value, priv->tconfig.instance_size);
       break;
-    case PROP_MIN_OBJECT_WIDTH:
-      g_value_set_uint (value, priv->tconfig.min_width);
+    case PROP_PENALTY_K:
+      g_value_set_float(value, priv->tconfig.penalty_k);
       break;
-    case PROP_MIN_OBJECT_HEIGHT:
-      g_value_set_uint (value, priv->tconfig.min_height);
+    case PROP_WINDOW_INFLUENCE:
+      g_value_set_float(value, priv->tconfig.window_influence);
       break;
-    case PROP_MAX_OBJECT_WIDTH:
-      g_value_set_uint (value, priv->tconfig.max_width);
+    case PROP_LR:
+      g_value_set_float(value, priv->tconfig.lr);
       break;
-    case PROP_MAX_OBJECT_HEIGHT:
-      g_value_set_uint (value, priv->tconfig.max_height);
+    case PROP_W2:
+      g_value_set_float(value, priv->tconfig.w2);
       break;
-    case PROP_NUM_FRAMES_CONFIDENCE:
-      g_value_set_uint (value, priv->tconfig.num_frames_confidence);
-      break;
-    case PROP_MATCHING_SEARCH_REGION:
-      g_value_set_float (value, priv->tconfig.obj_match_search_region);
-      break;
-    case PROP_RELATIVE_SEARCH_REGION:
-      g_value_set_float (value, priv->tconfig.padding);
-      break;
-    case PROP_CORRELATION_THRESHOLD:
-      g_value_set_float (value, priv->tconfig.dist_correlation_threshold);
-      break;
-    case PROP_OVERLAP_THRESHOLD:
-      g_value_set_float (value, priv->tconfig.dist_overlap_threshold);
-      break;
-    case PROP_SCALE_CHANGE_THRESHOLD:
-      g_value_set_float (value, priv->tconfig.dist_scale_change_threshold);
-      break;
-    case PROP_CORRELATION_WEIGHT:
-      g_value_set_float (value, priv->tconfig.dist_correlation_weight);
-      break;
-    case PROP_OVERLAP_WEIGHT:
-      g_value_set_float (value, priv->tconfig.dist_overlap_weight);
-      break;
-    case PROP_SCALE_CHANGE_WEIGHT:
-      g_value_set_float (value, priv->tconfig.dist_scale_change_weight);
-      break;
-    case PROP_OCCLUSION_THRESHOLD:
-      g_value_set_float (value, priv->tconfig.occlusion_threshold);
-      break;
-    case PROP_CONFIDENCE_SCORE_THRESHOLD:
-      g_value_set_float (value, priv->tconfig.confidence_score);
-      break;
-   case PROP_SKIP_INACTIVE_OBJS:
-      g_value_set_boolean (value, priv->tconfig.skip_inactive_objs);
+    case PROP_W3:
+      g_value_set_float(value, priv->tconfig.w3);
       break;
     default:
-      G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
+      G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
       break;
   }
 }
