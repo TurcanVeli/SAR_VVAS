@@ -206,7 +206,6 @@ gst_vvas_tracker_feature_length_type (void)
 /** @def GST_TYPE_VVAS_TRACKER_SEARCH_SCALE
  *  @brief Registers a new static enumeration type with the name GstVvasTrackerSearchScale
  */
-#define GST_TYPE_VVAS_TRACKER_SEARCH_SCALE (gst_vvas_tracker_search_scale_type ())
 
 /** @enum GstVvasTrackerSearchScale
  *  @brief Enum representing search scales to be used for tracking
@@ -226,28 +225,6 @@ typedef enum
 
 
 
-
-/**
- *  @fn GType gst_vvas_tracker_search_scale_type (void)
- *  @return enumeration identifier type
- *  @brief  Registers a new static enumeration type with the GstVvasTrackerSearchScale
- */
-static GType
-gst_vvas_tracker_search_scale_type (void)
-{
-  static GType qtype = 0;
-  if (qtype == 0) {
-    static const GEnumValue search_scale_type[] = {
-      {GST_SEARCH_SCALE_ALL, "Search all scales (up, down and same)", "all"},
-      {GST_SEARCH_SCALE_UP, "Search up and same scale", "up"},
-      {GST_SEARCH_SCALE_DOWN, "Search down and same scale", "down"},
-      {0, NULL, NULL}
-    };
-    qtype =
-        g_enum_register_static ("GstVvasTrackerSearchScale", search_scale_type);
-  }
-  return qtype;
-}
 
 /** @def GST_TYPE_VVAS_TRACKER_MATCHING_COLOR_SPACE
  *  @brief Registers a new static enumeration type with the name GstVVasTrackerMatchColorSpace
@@ -620,13 +597,6 @@ gst_vvas_xtracker_init (GstVvas_XTracker * self)
     priv->tconfig.tracker_type = TRACKER_ALGO_PRL;
   
 
-  if (self->search_scale == GST_SEARCH_SCALE_ALL)
-    priv->tconfig.search_scales = SEARCH_SCALE_ALL;
-  else if (self->search_scale == GST_SEARCH_SCALE_UP)
-    priv->tconfig.search_scales = SEARCH_SCALE_UP;
-  else if (self->search_scale == GST_SEARCH_SCALE_DOWN)
-    priv->tconfig.search_scales = SEARCH_SCALE_DOWN;
-
   if (self->match_color == GST_TRACKER_USE_RGB)
     priv->tconfig.obj_match_color = TRACKER_USE_RGB;
   else if (self->match_color == GST_TRACKER_USE_HSV)
@@ -691,28 +661,28 @@ gst_vvas_xtracker_set_property (GObject * object, guint prop_id,
             self->tracker_algo);
       break;
     case PROP_OUTPUT_SIZE:
-      priv->tconfig.output_size = g_value_get_int(value);
+      priv->tconfig.OUTPUT_SIZE = g_value_get_int(value);
       break;
     case PROP_EXEMPLAR_SIZE:
-      priv->tconfig.exemplar_size = g_value_get_int(value);
+      priv->tconfig.EXEMPLAR_SIZE = g_value_get_int(value);
       break;
     case PROP_SEARCH_SIZE:
-      priv->tconfig.search_size = g_value_get_int(value);
+      priv->tconfig.SEARCH_SIZE = g_value_get_int(value);
       break;
     case PROP_CONTEXT_AMOUNT:
-      priv->tconfig.context_amount = g_value_get_float(value);
+      priv->tconfig.CONTEXT_AMOUNT = g_value_get_float(value);
       break;
     case PROP_INSTANCE_SIZE:
-      priv->tconfig.instance_size = g_value_get_int(value);
+      priv->tconfig.INSTANCE_SIZE = g_value_get_int(value);
       break;
     case PROP_PENALTY_K:
-      priv->tconfig.penalty_k = g_value_get_float(value);
+      priv->tconfig.PENALTY_K = g_value_get_float(value);
       break;
     case PROP_WINDOW_INFLUENCE:
-      priv->tconfig.window_influence = g_value_get_float(value);
+      priv->tconfig.WINDOW_INFLUENCE = g_value_get_float(value);
       break;
     case PROP_LR:
-      priv->tconfig.lr = g_value_get_float(value);
+      priv->tconfig.LR = g_value_get_float(value);
       break;
     case PROP_W2:
       priv->tconfig.w2 = g_value_get_float(value);
@@ -756,28 +726,28 @@ gst_vvas_xtracker_get_property (GObject * object, guint prop_id, GValue * value,
       g_value_set_enum(value, priv->tconfig.tracker_type);
       break;
     case PROP_OUTPUT_SIZE:
-      g_value_set_int(value, priv->tconfig.output_size);
+      g_value_set_int(value, priv->tconfig.OUTPUT_SIZE);
       break;
     case PROP_EXEMPLAR_SIZE:
-      g_value_set_int(value, priv->tconfig.exemplar_size);
+      g_value_set_int(value, priv->tconfig.EXEMPLAR_SIZE);
       break;
     case PROP_SEARCH_SIZE:
-      g_value_set_int(value, priv->tconfig.search_size);
+      g_value_set_int(value, priv->tconfig.SEARCH_SIZE);
       break;
     case PROP_CONTEXT_AMOUNT:
-      g_value_set_float(value, priv->tconfig.context_amount);
+      g_value_set_float(value, priv->tconfig.CONTEXT_AMOUNT);
       break;
     case PROP_INSTANCE_SIZE:
-      g_value_set_int(value, priv->tconfig.instance_size);
+      g_value_set_int(value, priv->tconfig.INSTANCE_SIZE);
       break;
     case PROP_PENALTY_K:
-      g_value_set_float(value, priv->tconfig.penalty_k);
+      g_value_set_float(value, priv->tconfig.PENALTY_K);
       break;
     case PROP_WINDOW_INFLUENCE:
-      g_value_set_float(value, priv->tconfig.window_influence);
+      g_value_set_float(value, priv->tconfig.WINDOW_INFLUENCE);
       break;
     case PROP_LR:
-      g_value_set_float(value, priv->tconfig.lr);
+      g_value_set_float(value, priv->tconfig.LR);
       break;
     case PROP_W2:
       g_value_set_float(value, priv->tconfig.w2);
