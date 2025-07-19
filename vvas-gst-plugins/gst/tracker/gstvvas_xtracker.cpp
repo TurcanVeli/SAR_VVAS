@@ -594,7 +594,7 @@ gst_vvas_xtracker_init (GstVvas_XTracker * self)
   self->match_color = GST_TYPE_VVAS_TRACKER_MATCHING_COLOR_SPACE;
 
   if (self->tracker_algo == GST_TRACKER_ALGO_PRL)
-    priv->tconfig.tracker_type = TRACKER_ALGO_PRL;
+    priv->tconfig.tracker_type = TRACKER_PRL;
   
 
   if (self->match_color == GST_TRACKER_USE_RGB)
@@ -655,7 +655,7 @@ gst_vvas_xtracker_set_property (GObject * object, guint prop_id,
     case PROP_TRACKER_TYPE:
       self->tracker_algo = g_value_get_enum (value);
       if (self->tracker_algo == GST_TRACKER_ALGO_PRL)
-        priv->tconfig.tracker_type = TRACKER_ALGO_PRL;
+        priv->tconfig.tracker_type = TRACKER_PRL;
       else
         GST_ERROR_OBJECT (self, "Invalid Tracker type %d set\n",
             self->tracker_algo);
