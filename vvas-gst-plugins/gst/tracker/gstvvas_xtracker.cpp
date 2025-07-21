@@ -62,7 +62,7 @@ typedef struct _GstVvas_XTrackerPrivate GstVvas_XTrackerPrivate;
 enum
 {
   PROP_0,                          // Default, değiştirme
-  PROP_OBJ_MATCH_COLOR,            // VvasTrackerMatchColorSpace obj_match_color;
+  PROP_USE_MATCHING_COLOR_SPACE,         
   PROP_MODEL_PATH,                 // std::string MODEL_PATH;
   PROP_TRACKER_TYPE,               // VvasTrackerAlgoType tracker_type;
   PROP_OUTPUT_SIZE,                // int OUTPUT_SIZE;
@@ -486,12 +486,13 @@ gst_vvas_xtracker_class_init (GstVvas_XTrackerClass * klass)
   transform_class->sink_event = gst_vvas_xtracker_sink_event;
 
   
-  g_object_class_install_property (gobject_class, PROP_OBJ_MATCH_COLOR,
+  g_object_class_install_property (gobject_class, PROP_USE_MATCHING_COLOR_SPACE,
     g_param_spec_enum ("obj-match-color", "Object Match Color",
         "Object match color space for PRL tracker",
         GST_TYPE_VVAS_TRACKER_MATCHING_COLOR_SPACE,
         GST_VVAS_TRACKER_OBJ_MATCH_COLOR_DEFAULT,
         (GParamFlags)(G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS)));
+
 
 g_object_class_install_property (gobject_class, PROP_MODEL_PATH,
     g_param_spec_string ("model-path", "Model Path",
@@ -720,7 +721,7 @@ gst_vvas_xtracker_get_property (GObject * object, guint prop_id, GValue * value,
   GstVvas_XTrackerPrivate *priv = self->priv;
 
   switch (prop_id) {
-    case PROP_OBJ_MATCH_COLOR:
+    case PROP_USE_MATCHING_COLOR_SPACE:
       g_value_set_enum(value, priv->tconfig.obj_match_color);
       break;
     
