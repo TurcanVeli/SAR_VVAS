@@ -643,8 +643,12 @@ gst_vvas_xtracker_set_property (GObject * object, guint prop_id,
   
 
   switch (prop_id) {
-    case PROP_OBJ_MATCH_COLOR:
-      priv->tconfig.obj_match_color = g_value_get_enum(value);
+    case PROP_USE_MATCHING_COLOR_SPACE:
+      self->match_color = g_value_get_enum (value);
+      if (self->match_color == GST_TRACKER_USE_RGB)
+        priv->tconfig.obj_match_color = TRACKER_USE_RGB;
+      else if (self->match_color == GST_TRACKER_USE_HSV)
+        priv->tconfig.obj_match_color = TRACKER_USE_HSV;
       break;
     case PROP_MODEL_PATH: {
       const gchar *model_path = g_value_get_string(value);
@@ -719,9 +723,11 @@ gst_vvas_xtracker_get_property (GObject * object, guint prop_id, GValue * value,
     case PROP_OBJ_MATCH_COLOR:
       g_value_set_enum(value, priv->tconfig.obj_match_color);
       break;
-    case PROP_MODEL_PATH:
-      g_value_set_string(value, priv->tconfig.MODEL_PATH);
+    
+      case PROP_MODEL_PATH:
+      g_value_set_string(value, priv->tconfig.MODEL_PATH.c_str());
       break;
+
     case PROP_TRACKER_TYPE:
       g_value_set_enum(value, priv->tconfig.tracker_type);
       break;
